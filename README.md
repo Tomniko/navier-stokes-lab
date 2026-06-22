@@ -25,4 +25,4 @@ python3 -m http.server 8000
 ```
 
 ## Publicado en
-GitHub Pages → (rellena tu URL aquí una vez activado).
+GitHub Pages → [https://tomniko.github.io/navier-stokes-lab/](https://tomniko.github.io/navier-stokes-lab/)
