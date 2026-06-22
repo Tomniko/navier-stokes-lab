@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Navier–Stokes interactivo · Laboratorio de fluidos</title>
+<style>
+  :root{
+    --bg:#070a12; --panel:#0e1422; --panel2:#131b2e; --line:#243049;
+    --txt:#dce6f7; --dim:#8ea2c4; --accent:#4ea1ff;
+    /* colores por término de la ecuación */
+    --t-time:#6fd3ff;     /* ∂u/∂t */
+    --t-adv:#ff8a5c;      /* (u·∇)u */
+    --t-press:#c08bff;    /* −∇p */
+    --t-visc:#7be08a;     /* ν∇²u */
+    --t-force:#ffd166;    /* f */
+    --t-div:#ff6b9d;      /* ∇·u=0 */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%, #122038 0%, var(--bg) 60%);
+    color:var(--txt); font:15px/1.55 "Segoe UI",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent)}
+  .wrap{max-width:1240px;margin:0 auto;padding:22px 18px 80px}
+  header h1{font-size:30px;margin:.2em 0 .1em;letter-spacing:.2px}
+  header h1 .eq{color:var(--accent)}
+  header p.sub{color:var(--dim);margin:.2em 0 0;max-width:760px}
+
+  details.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:16px 0;padding:0 16px}
+  details.card>summary{cursor:pointer;font-weight:600;padding:14px 0;list-style:none;display:flex;align-items:center;gap:10px}
+  details.card>summary::-webkit-details-marker{display:none}
+  details.card>summary::before{content:"▶";color:var(--accent);font-size:11px;transition:transform .15s}
+  details.card[open]>summary::before{transform:rotate(90deg)}
+  details.card .body{padding:0 0 16px}
+  details.card .body p{margin:.4em 0}
+
+  .stage{display:grid;grid-template-columns:1fr;gap:14px;margin:14px 0}
+  .canvas-card{position:relative;background:#04060c;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  #gl{display:block;width:100%;height:560px}
+  @media(max-width:720px){#gl{height:440px}}
+  .badge{position:absolute;padding:5px 10px;border-radius:8px;background:rgba(8,12,22,.72);
+    border:1px solid var(--line);font-size:12px;color:var(--dim);backdrop-filter:blur(4px);pointer-events:none}
+  .badge.tl{top:10px;left:10px} .badge.tr{top:10px;right:10px} .badge.bl{bottom:10px;left:10px}
+  .badge.tr2{top:10px;left:calc(50% + 10px)}
+  .badge b{color:var(--txt)}
+  .rebadge{position:absolute;top:10px;right:10px;padding:7px 12px;border-radius:10px;
+    background:rgba(8,12,22,.8);border:1px solid var(--line);font-size:13px;text-align:right}
+  .rebadge .num{font-size:19px;font-weight:700}
+  .rebadge .reg{font-size:11px;letter-spacing:.5px;text-transform:uppercase}
+  .divider-hint{position:absolute;left:50%;top:0;bottom:0;width:1px;background:linear-gradient(rgba(78,161,255,.05),rgba(78,161,255,.35),rgba(78,161,255,.05));pointer-events:none}
+
+  .grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}
+  @media(max-width:920px){.grid2{grid-template-columns:1fr}}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .panel h3{margin:.1em 0 .7em;font-size:15px}
+  .presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
+  .preset{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--txt);
+    padding:8px 12px;border-radius:999px;font-size:13px;display:flex;align-items:center;gap:7px;transition:.12s}
+  .preset:hover{border-color:var(--accent)}
+  .preset.active{border-color:var(--accent);background:#16263f;box-shadow:0 0 0 1px var(--accent) inset}
+  .preset .dot{width:11px;height:11px;border-radius:50%;box-shadow:0 0 6px currentColor}
+
+  .ctrl{margin:13px 0}
+  .ctrl .lab{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:5px}
+  .ctrl .lab .name{display:flex;align-items:center;gap:7px}
+  .ctrl .lab .val{color:var(--dim);font-variant-numeric:tabular-nums}
+  .chip{font-size:10px;padding:1px 7px;border-radius:6px;color:#06101e;font-weight:700;letter-spacing:.3px}
+  input[type=range]{width:100%;-webkit-appearance:none;height:5px;border-radius:5px;background:#22304a;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+    background:var(--accent);cursor:pointer;border:2px solid #0a1322;box-shadow:0 0 8px rgba(78,161,255,.6)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #0a1322}
+
+  .toggles{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+  .tog{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer}
+  .tog .meta{display:flex;flex-direction:column}
+  .tog .meta small{color:var(--dim);font-size:11px}
+  .switch{position:relative;width:42px;height:23px;border-radius:999px;background:#2a3650;flex:0 0 auto;transition:.15s}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#7e8db0;transition:.15s}
+  .tog.on .switch{background:#1d5fb0} .tog.on .switch::after{left:21px;background:#fff}
+  .btnrow{display:flex;gap:8px;margin-top:14px}
+  .btn{flex:1;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--txt);
+    padding:10px;border-radius:10px;font-size:13px;transition:.12s}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:#15406f;border-color:#2f6db5}
+
+  /* Ecuación */
+  .equation{font-size:clamp(17px,2.4vw,23px);text-align:center;padding:18px 6px 8px;line-height:2.1}
+  .term{display:inline-block;padding:3px 9px;margin:3px 2px;border-radius:9px;border:1px solid transparent;
+    transition:.15s;cursor:default}
+  .term.dim{opacity:.4}
+  .term .sub{font-size:.62em;vertical-align:sub} .term .sup{font-size:.62em;vertical-align:super}
+  .t-time{background:rgba(111,211,255,.10);color:var(--t-time);border-color:rgba(111,211,255,.3)}
+  .t-adv{background:rgba(255,138,92,.10);color:var(--t-adv);border-color:rgba(255,138,92,.3)}
+  .t-press{background:rgba(192,139,255,.10);color:var(--t-press);border-color:rgba(192,139,255,.3)}
+  .t-visc{background:rgba(123,224,138,.10);color:var(--t-visc);border-color:rgba(123,224,138,.3)}
+  .t-force{background:rgba(255,209,102,.10);color:var(--t-force);border-color:rgba(255,209,102,.3)}
+  .t-div{background:rgba(255,107,157,.10);color:var(--t-div);border-color:rgba(255,107,157,.3)}
+  .term.hot{box-shadow:0 0 0 2px currentColor, 0 0 16px -2px currentColor;transform:translateY(-1px)}
+  .op{color:var(--dim);padding:0 2px}
+  .term-explain{min-height:54px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;margin-top:6px;font-size:13.5px;color:var(--dim)}
+  .term-explain b{color:var(--txt)}
+  .constraint{text-align:center;color:var(--dim);font-size:15px;margin-top:4px}
+
+  ul.exp{margin:.3em 0;padding-left:18px}
+  ul.exp li{margin:.45em 0}
+  ul.exp li b{color:var(--txt)}
+  .kbd{background:#1a2440;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12px;color:var(--txt)}
+  .mathblock{background:#0a0f1c;border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;
+    font-family:"Cascadia Code",Consolas,monospace;font-size:13.5px;color:#bcd0f0;white-space:pre}
+  footer{color:var(--dim);font-size:12px;text-align:center;margin-top:30px}
+  .err{background:#3a1320;border:1px solid #7a2440;color:#ffd3df;padding:14px;border-radius:10px;margin:14px 0}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--dim);margin-top:8px}
+  .legend i{display:inline-block;width:34px;height:9px;border-radius:3px;vertical-align:middle;margin-right:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Laboratorio de <span class="eq">Navier–Stokes</span></h1>
+    <p class="sub">Un fluido real, simulado en tu GPU, gobernado por las ecuaciones de Navier–Stokes.
+    A la <b>izquierda</b> ves el líquido en 3D; a la <b>derecha</b>, el campo de velocidad que resuelve la ecuación.
+    Mueve los controles y observa cómo cada término cambia el comportamiento.</p>
+  </header>
+
+  <details class="card" open>
+    <summary>¿Qué es Navier–Stokes? (empieza por aquí)</summary>
+    <div class="body">
+      <p>Las ecuaciones de Navier–Stokes son, básicamente, la <b>2ª ley de Newton (F = m·a) aplicada a cada
+      gotita de fluido</b>. Dicen cómo cambia la velocidad del fluido en cada punto según las fuerzas que actúan sobre él:</p>
+      <ul class="exp">
+        <li>El fluido se <b>arrastra a sí mismo</b> (advección) → por eso aparecen remolinos y turbulencia.</li>
+        <li>La <b>presión</b> lo empuja de las zonas comprimidas a las relajadas → mantiene el volumen.</li>
+        <li>La <b>viscosidad</b> (rozamiento interno) lo frena y suaviza → el agua fluye, la miel apenas.</li>
+        <li>Las <b>fuerzas externas</b> (tu ratón, la gravedad…) lo ponen en movimiento.</li>
+      </ul>
+      <p>Resolverlas “a mano” es imposible; aquí las resuelve la tarjeta gráfica miles de veces por segundo.
+      <b>Arrastra el ratón sobre el panel 2D de la derecha</b> para inyectar fluido, o
+      <b>rota la vista 3D</b> de la izquierda con el ratón.</p>
+    </div>
+  </details>
+
+  <div class="stage">
+    <div class="canvas-card">
+      <canvas id="gl"></canvas>
+      <div class="divider-hint"></div>
+      <div class="badge tl">🌊 Líquido en 3D · <b>arrastra para rotar</b></div>
+      <div class="badge tr2">📊 Campo de velocidad 2D · <b>arrastra para inyectar</b></div>
+      <div class="rebadge">
+        <div class="num" id="reNum">—</div>
+        <div class="reg" id="reReg" style="color:var(--dim)">Reynolds (ilustrativo)</div>
+      </div>
+      <div class="badge bl" id="fpsBadge">— fps</div>
+    </div>
+    <div class="legend">
+      <span><i style="background:linear-gradient(90deg,#440154,#21908c,#fde725)"></i> Panel 2D: velocidad del flujo (lento → rápido)</span>
+      <span>Vista 3D: altura y color = cantidad de fluido/tinte</span>
+    </div>
+  </div>
+
+  <div class="grid2">
+
+    <!-- CONTROLES -->
+    <div class="panel">
+      <h3>Tipo de fluido</h3>
+      <div class="presets" id="presets"></div>
+      <p style="color:var(--dim);font-size:12.5px;margin:.4em 0 0">Cada preset ajusta viscosidad, vorticidad y persistencia.
+      Luego puedes afinar todo a mano abajo.</p>
+
+      <h3 style="margin-top:18px">Parámetros de la ecuación</h3>
+
+      <div class="ctrl" data-term="visc">
+        <div class="lab"><span class="name"><span class="chip" style="background:var(--t-visc)">ν∇²u</span> Viscosidad</span><span class="val" id="vViscosity"></span></div>
+        <input id="viscosity" type="range" min="0.05" max="5" step="0.05">
+      </div>
+
+      <div class="ctrl" data-term="force">
+        <div class="lab"><span class="name"><span class="chip" style="background:var(--t-force);color:#06101e">f</span> Fuerza de inyección</span><span class="val" id="vForce"></span></div>
+        <input id="force" type="range" min="20" max="240" step="5">
+      </div>
+
+      <div class="ctrl" data-term="adv">
+        <div class="lab"><span class="name"><span class="chip" style="background:var(--t-adv)">(u·∇)u</span> Vorticidad / remolinos</span><span class="val" id="vCurl"></span></div>
+        <input id="curl" type="range" min="0" max="50" step="1">
+      </div>
+
+      <div class="ctrl" data-term="press">
+        <div class="lab"><span class="name"><span class="chip" style="background:var(--t-press)">∇p</span> Iteraciones de presión</span><span class="val" id="vIter"></span></div>
+        <input id="iter" type="range" min="1" max="40" step="1">
+      </div>
+
+      <div class="ctrl" data-term="visc">
+        <div class="lab"><span class="name">💧 Persistencia del tinte</span><span class="val" id="vDye"></span></div>
+        <input id="dye" type="range" min="0.2" max="3" step="0.05">
+      </div>
+
+      <div class="ctrl" data-term="time">
+        <div class="lab"><span class="name"><span class="chip" style="background:var(--t-time);color:#06101e">∂u/∂t</span> Velocidad de simulación</span><span class="val" id="vSpeed"></span></div>
+        <input id="speed" type="range" min="0.2" max="2" step="0.1">
+      </div>
+
+      <h3 style="margin-top:18px">Suposiciones (assumptions)</h3>
+      <div class="toggles">
+        <div class="tog on" id="togIncomp" data-term="div">
+          <div class="meta"><span>Incompresible &nbsp;<span style="color:var(--t-div)">∇·u = 0</span></span>
+            <small>Apágalo y desaparece la proyección de presión: el fluido se “comprime”.</small></div>
+          <div class="switch"></div>
+        </div>
+        <div class="tog" id="togEuler" data-term="visc">
+          <div class="meta"><span>Fluido ideal (Euler) &nbsp;<span style="color:var(--t-visc)">ν = 0</span></span>
+            <small>Sin viscosidad: la energía no se disipa, todo se vuelve caótico.</small></div>
+          <div class="switch"></div>
+        </div>
+        <div class="tog" id="togSource" data-term="force">
+          <div class="meta"><span>Fuente automática</span>
+            <small>Chorro que gira inyectando fluido solo (apágalo si prefieres control manual).</small></div>
+          <div class="switch"></div>
+        </div>
+      </div>
+
+      <div class="btnrow">
+        <button class="btn" id="pause">⏸ Pausar</button>
+        <button class="btn primary" id="reset">↺ Reiniciar fluido</button>
+      </div>
+    </div>
+
+    <!-- ECUACIÓN -->
+    <div class="panel">
+      <h3>La ecuación, término a término</h3>
+      <div class="equation" id="equation">
+        <span class="term t-time" data-key="time">ρ&#8201;∂u/∂t</span>
+        <span class="op">+</span>
+        <span class="term t-adv" data-key="adv">ρ&#8201;(u·∇)u</span>
+        <span class="op">=</span>
+        <span class="term t-press" data-key="press">−∇p</span>
+        <span class="op">+</span>
+        <span class="term t-visc" data-key="visc">μ∇<span class="sup">2</span>u</span>
+        <span class="op">+</span>
+        <span class="term t-force" data-key="force">f</span>
+      </div>
+      <div class="constraint">sujeto a la conservación de masa: &nbsp;
+        <span class="term t-div" data-key="div" style="font-size:.95em">∇·u = 0</span></div>
+      <div class="term-explain" id="termExplain">
+        Pasa el ratón (o mueve un control) por cada término para ver qué hace.
+        <b>Cada deslizador de la izquierda está conectado a su término.</b>
+      </div>
+
+      <details class="card" style="margin:14px 0 0;background:var(--panel2)">
+        <summary>Mostrar matemática avanzada</summary>
+        <div class="body">
+          <p>Forma vectorial completa (densidad ρ constante, viscosidad μ, ν = μ/ρ cinemática):</p>
+          <div class="mathblock">∂u/∂t + (u·∇)u = −(1/ρ)∇p + ν∇²u + g
+
+∇·u = 0            (incompresibilidad)</div>
+          <p style="margin-top:12px">En 2D, por componentes (u = (u,v)):</p>
+          <div class="mathblock">∂u/∂t + u·∂u/∂x + v·∂u/∂y = −(1/ρ)·∂p/∂x + ν(∂²u/∂x² + ∂²u/∂y²)
+∂v/∂t + u·∂v/∂x + v·∂v/∂y = −(1/ρ)·∂p/∂y + ν(∂²v/∂x² + ∂²v/∂y²)
+∂u/∂x + ∂v/∂y = 0</div>
+          <p style="margin-top:12px"><b>Número de Reynolds</b> Re = U·L/ν compara la inercia (advección) frente a la viscosidad.
+          Re bajo → flujo laminar y ordenado; Re alto → turbulento y caótico.</p>
+          <p><b>Casos límite (suposiciones):</b></p>
+          <ul class="exp">
+            <li><b>Euler</b> (ν = 0): se elimina el término viscoso → fluido ideal.</li>
+            <li><b>Stokes</b> (Re ≪ 1): se desprecia la advección (u·∇)u → flujo reptante, muy viscoso.</li>
+            <li><b>Estacionario</b> (∂u/∂t = 0): el campo ya no cambia en el tiempo.</li>
+            <li><b>Compresible</b> (∇·u ≠ 0): se relaja la conservación de volumen.</li>
+          </ul>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <details class="card">
+    <summary>🧪 Experimentos sugeridos</summary>
+    <div class="body">
+      <ul class="exp">
+        <li><b>Agua vs. Miel:</b> alterna los dos presets sin tocar nada más. La miel (viscosidad alta) frena
+          los remolinos casi al instante; el agua los conserva. Mira el número de Reynolds.</li>
+        <li><b>Apaga “Incompresible”:</b> el fluido deja de conservar volumen; el tinte se apelmaza y aparecen
+          fuentes/sumideros. Eso es lo que evita el término de presión <span style="color:var(--t-press)">−∇p</span>.</li>
+        <li><b>Activa “Fluido ideal (Euler)”</b> y sube la <b>Fuerza</b>: sin viscosidad la energía no se disipa
+          y el flujo se vuelve turbulento y persistente.</li>
+        <li><b>Baja “Iteraciones de presión” a 1–2:</b> la proyección no converge y verás artefactos de divergencia.
+          Súbelas a 40 para un flujo limpio.</li>
+        <li><b>Sube la Vorticidad al máximo:</b> realza los remolinos pequeños (confinamiento de vorticidad),
+          el rasgo visual de la turbulencia.</li>
+      </ul>
+    </div>
+  </details>
+
+  <div id="errbox"></div>
+  <footer>Solver Navier–Stokes incompresible (método de Stam / proyección de presión) en GPU con Three.js · 100% en tu navegador.</footer>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const RES = 256;                 // resolución de la rejilla de simulación
+const TEXEL = 1.0 / RES;
+const canvas = document.getElementById('gl');
+
+// ---------- Renderer ----------
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
+} catch(e){ fail('No se pudo crear el contexto WebGL.'); }
+renderer.setPixelRatio(1);                  // viewports en px de CSS (sin ratios)
+renderer.autoClear = false;
+if(!renderer.capabilities.isWebGL2){ fail('Tu navegador no soporta WebGL2 (necesario para texturas float).'); }
+
+// ---------- Render targets (todos RGBA half-float = máxima compatibilidad) ----------
+function makeRT(){
+  return new THREE.WebGLRenderTarget(RES, RES, {
+    type: THREE.HalfFloatType, format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+    wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping,
+    depthBuffer:false, stencilBuffer:false
+  });
+}
+function makeDouble(){ let a=makeRT(), b=makeRT();
+  return { get read(){return a;}, get write(){return b;}, swap(){const t=a;a=b;b=t;} }; }
+
+const velocity   = makeDouble();   // .xy = velocidad
+const dye        = makeDouble();   // .rgb = tinte (lo que ves)
+const pressure   = makeDouble();   // .x = presión
+const divergence = makeRT();       // .x = divergencia
+const curlRT     = makeRT();       // .x = vorticidad
+
+// ---------- Quad de pantalla completa para los pases ----------
+const VERT = /* glsl */`
+  varying vec2 vUv;
+  void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const quadGeo = new THREE.PlaneGeometry(2,2);
+const simScene = new THREE.Scene();
+const simQuad  = new THREE.Mesh(quadGeo, null);
+simScene.add(simQuad);
+const simCam = new THREE.Camera();
+
+function blit(material, target){
+  simQuad.material = material;
+  renderer.setRenderTarget(target);
+  renderer.setViewport(0,0,RES,RES);
+  renderer.render(simScene, simCam);
+}
+
+function shader(frag, uniforms){
+  return new THREE.ShaderMaterial({ vertexShader:VERT, fragmentShader:frag, uniforms,
+    depthTest:false, depthWrite:false });
+}
+const U = (v)=>({value:v});
+const texel = new THREE.Vector2(TEXEL, TEXEL);
+
+// ---------- Materiales / pases ----------
+const matSplat = shader(/* glsl */`
+  varying vec2 vUv; uniform sampler2D uTarget; uniform vec3 color;
+  uniform vec2 point; uniform float radius;
+  void main(){
+    vec2 p = vUv - point;
+    vec3 splat = exp(-dot(p,p)/radius) * color;
+    vec3 base = texture2D(uTarget, vUv).xyz;
+    gl_FragColor = vec4(base + splat, 1.0);
+  }`, { uTarget:U(null), color:U(new THREE.Vector3()), point:U(new THREE.Vector2()), radius:U(0.0025) });
+
+const matAdvect = shader(/* glsl */`
+  varying vec2 vUv; uniform sampler2D uVelocity; uniform sampler2D uSource;
+  uniform vec2 texelSize; uniform float dt; uniform float dissipation;
+  void main(){
+    vec2 vel = texture2D(uVelocity, vUv).xy;
+    vec2 coord = vUv - dt * vel * texelSize;
+    vec4 result = texture2D(uSource, coord);
+    gl_FragColor = result / (1.0 + dissipation * dt);
+  }`, { uVelocity:U(null), uSource:U(null), texelSize:U(texel), dt:U(0.016), dissipation:U(1.0) });
+
+const matDivergence = shader(/* glsl */`
+  varying vec2 vUv; uniform sampler2D uVelocity; uniform vec2 texelSize;
+  void main(){
+    float L = texture2D(uVelocity, vUv - vec2(texelSize.x,0.0)).x;
+    float R = texture2D(uVelocity, vUv + vec2(texelSize.x,0.0)).x;
+    float B = texture2D(uVelocity, vUv - vec2(0.0,texelSize.y)).y;
+    float T = texture2D(uVelocity, vUv + vec2(0.0,texelSize.y)).y;
+    float div = 0.5 * ((R - L) + (T - B));
+    gl_FragColor = vec4(div, 0.0, 0.0, 1.0);
+  }`, { uVelocity:U(null), texelSize:U(texel) });
+
+const matCurl = shader(/* glsl */`
+  varying vec2 vUv; uniform sampler2D uVelocity; uniform vec2 texelSize;
+  void main(){
+    float L = texture2D(uVelocity, vUv - vec2(texelSize.x,0.0)).y;
+    float R = texture2D(uVelocity, vUv + vec2(texelSize.x,0.0)).y;
+    float B = texture2D(uVelocity, vUv - vec2(0.0,texelSize.y)).x;
+    float T = texture2D(uVelocity, vUv + vec2(0.0,texelSize.y)).x;
+    float curl = 0.5 * ((R - L) - (T - B));
+    gl_FragColor = vec4(curl, 0.0, 0.0, 1.0);
+  }`, { uVelocity:U(null), texelSize:U(texel) });
+
+const matVorticity = shader(/* glsl */`
+  varying vec2 vUv; uniform sampler2D uVelocity; uniform sampler2D uCurl;
+  uniform vec2 texelSize; uniform float curlAmount; uniform float dt;
+  void main(){
+    float L = texture2D(uCurl, vUv - vec2(texelSize.x,0.0)).x;
+    float R = texture2D(uCurl, vUv + vec2(texelSize.x,0.0)).x;
+    float B = texture2D(uCurl, vUv - vec2(0.0,texelSize.y)).x;
+    float T = texture2D(uCurl, vUv + vec2(0.0,texelSize.y)).x;
+    float C = texture2D(uCurl, vUv).x;
+    vec2 force = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L));
+    force /= length(force) + 1e-4;
+    force *= curlAmount * C;
+    force.y *= -1.0;
+    vec2 vel = texture2D(uVelocity, vUv).xy + force * dt;
+    gl_FragColor = vec4(clamp(vel, -2000.0, 2000.0), 0.0, 1.0);
+  }`, { uVelocity:U(null), uCurl:U(null), texelSize:U(texel), curlAmount:U(24.0), dt:U(0.016) });
+
+const matPressure = shader(/* glsl */`
+  varying vec2 vUv; uniform sampler2D uPressure; uniform sampler2D uDivergence; uniform vec2 texelSize;
+  void main(){
+    float L = texture2D(uPressure, vUv - vec2(texelSize.x,0.0)).x;
+    float R = texture2D(uPressure, vUv + vec2(texelSize.x,0.0)).x;
+    float B = texture2D(uPressure, vUv - vec2(0.0,texelSize.y)).x;
+    float T = texture2D(uPressure, vUv + vec2(0.0,texelSize.y)).x;
+    float div = texture2D(uDivergence, vUv).x;
+    gl_FragColor = vec4((L + R + B + T - div) * 0.25, 0.0, 0.0, 1.0);
+  }`, { uPressure:U(null), uDivergence:U(null), texelSize:U(texel) });
+
+const matGradient = shader(/* glsl */`
+  varying vec2 vUv; uniform sampler2D uPressure; uniform sampler2D uVelocity; uniform vec2 texelSize;
+  void main(){
+    float L = texture2D(uPressure, vUv - vec2(texelSize.x,0.0)).x;
+    float R = texture2D(uPressure, vUv + vec2(texelSize.x,0.0)).x;
+    float B = texture2D(uPressure, vUv - vec2(0.0,texelSize.y)).x;
+    float T = texture2D(uPressure, vUv + vec2(0.0,texelSize.y)).x;
+    vec2 vel = texture2D(uVelocity, vUv).xy - 0.5 * vec2(R - L, T - B);
+    gl_FragColor = vec4(vel, 0.0, 1.0);
+  }`, { uPressure:U(null), uVelocity:U(null), texelSize:U(texel) });
+
+const matClear = shader(/* glsl */`
+  varying vec2 vUv; uniform sampler2D uTexture; uniform float value;
+  void main(){ gl_FragColor = value * texture2D(uTexture, vUv); }`,
+  { uTexture:U(null), value:U(0.8) });
+
+// ---------- Vista 2D: campo de velocidad con colormap viridis ----------
+const matView2D = shader(/* glsl */`
+  varying vec2 vUv; uniform sampler2D uVelocity; uniform float uScale;
+  vec3 viridis(float t){
+    const vec3 c0=vec3(0.2777,0.0054,0.3341); const vec3 c1=vec3(0.1051,1.4046,1.3846);
+    const vec3 c2=vec3(-0.3309,0.2148,0.0951); const vec3 c3=vec3(-4.6342,-5.7991,-19.3324);
+    const vec3 c4=vec3(6.2283,14.1799,56.6906); const vec3 c5=vec3(4.7764,-13.7451,-65.3530);
+    const vec3 c6=vec3(-5.4355,4.6459,26.3124);
+    return c0+t*(c1+t*(c2+t*(c3+t*(c4+t*(c5+t*c6)))));
+  }
+  void main(){
+    vec2 vel = texture2D(uVelocity, vUv).xy;
+    float m = clamp(length(vel) * uScale, 0.0, 1.0);
+    gl_FragColor = vec4(viridis(m), 1.0);
+  }`, { uVelocity:U(null), uScale:U(0.0045) });
+const scene2D = new THREE.Scene();
+scene2D.add(new THREE.Mesh(quadGeo, matView2D));
+
+// ---------- Vista 3D: superficie de líquido desplazada por el tinte ----------
+const scene3D = new THREE.Scene();
+const camera3D = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera3D.position.set(0, 2.4, 3.5);
+const controls = new OrbitControls(camera3D, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 1.6; controls.maxDistance = 8; controls.target.set(0,0,0);
+controls.enablePan = false; controls.enabled = false;   // se activa al pulsar sobre la mitad 3D
+
+const planeGeo = new THREE.PlaneGeometry(3.4, 3.4, RES, RES);
+planeGeo.rotateX(-Math.PI/2);
+const matSurface = new THREE.ShaderMaterial({
+  uniforms:{ uTex:U(dye.read.texture), uHeight:U(0.7), texel:U(texel),
+             uLight:U(new THREE.Vector3(0.5,0.9,0.35).normalize()) },
+  vertexShader:/* glsl */`
+    uniform sampler2D uTex; uniform float uHeight;
+    varying vec2 vUv; varying float vH;
+    float lum(vec3 c){ return dot(c, vec3(0.30,0.59,0.11)); }
+    void main(){
+      vUv = uv;
+      float h = lum(texture2D(uTex, uv).rgb);
+      vH = h;
+      vec3 pos = position; pos.y += min(h,2.0) * uHeight;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }`,
+  fragmentShader:/* glsl */`
+    uniform sampler2D uTex; uniform float uHeight; uniform vec2 texel; uniform vec3 uLight;
+    varying vec2 vUv; varying float vH;
+    float lum(vec3 c){ return dot(c, vec3(0.30,0.59,0.11)); }
+    void main(){
+      float hL = lum(texture2D(uTex, vUv - vec2(texel.x,0.0)).rgb);
+      float hR = lum(texture2D(uTex, vUv + vec2(texel.x,0.0)).rgb);
+      float hB = lum(texture2D(uTex, vUv - vec2(0.0,texel.y)).rgb);
+      float hT = lum(texture2D(uTex, vUv + vec2(0.0,texel.y)).rgb);
+      vec3 n = normalize(vec3((hL-hR)*uHeight, 4.0*texel.x, (hB-hT)*uHeight));
+      float diff = clamp(dot(n, uLight), 0.0, 1.0);
+      vec3 col = texture2D(uTex, vUv).rgb;
+      float bright = clamp(lum(col)*3.0, 0.0, 1.0);
+      vec3 base = mix(vec3(0.02,0.05,0.10), col*1.8, bright);   // fondo oscuro -> color del fluido
+      // brillo especular para aspecto "mojado"
+      vec3 viewDir = vec3(0.0,1.0,0.4);
+      vec3 h = normalize(uLight + normalize(viewDir));
+      float spec = pow(clamp(dot(n,h),0.0,1.0), 32.0) * bright;
+      vec3 outc = base*(0.35 + 0.75*diff) + spec*vec3(0.9,0.95,1.0);
+      gl_FragColor = vec4(outc, 1.0);
+    }`
+});
+scene3D.add(new THREE.Mesh(planeGeo, matSurface));
+// base sutil para dar profundidad
+const baseMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.4,3.4),
+  new THREE.MeshBasicMaterial({color:0x070b14}));
+baseMesh.rotateX(-Math.PI/2); baseMesh.position.y = -0.02;
+scene3D.add(baseMesh);
+
+// =================== Estado y parámetros ===================
+const state = {
+  velDissipation: 0.6,   // viscosidad efectiva (frena la velocidad)
+  dyeDissipation: 1.0,
+  curl: 24,
+  iterations: 22,
+  force: 80,
+  speed: 1.0,
+  incompressible: true,
+  euler: false,
+  autoSource: false,
+  paused: false,
+  hue: 0.58,             // color base del tinte (HSV)
+};
+
+function hsv2rgb(h,s,v){
+  let r,g,b; const i=Math.floor(h*6), f=h*6-i, p=v*(1-s), q=v*(1-f*s), t=v*(1-(1-f)*s);
+  switch(i%6){case 0:r=v;g=t;b=p;break;case 1:r=q;g=v;b=p;break;case 2:r=p;g=v;b=t;break;
+    case 3:r=p;g=q;b=v;break;case 4:r=t;g=p;b=v;break;default:r=v;g=p;b=q;}
+  return [r,g,b];
+}
+
+// Inyección de fluido (splat)
+function splat(x, y, dx, dy, rgb){
+  matSplat.uniforms.point.value.set(x, y);
+  matSplat.uniforms.radius.value = 0.0022;
+  // velocidad
+  matSplat.uniforms.uTarget.value = velocity.read.texture;
+  matSplat.uniforms.color.value.set(dx, dy, 0.0);
+  blit(matSplat, velocity.write); velocity.swap();
+  // tinte
+  matSplat.uniforms.uTarget.value = dye.read.texture;
+  matSplat.uniforms.color.value.set(rgb[0], rgb[1], rgb[2]);
+  blit(matSplat, dye.write); dye.swap();
+}
+
+// Chasquido: un clic genera una gota + un empuje radial hacia afuera,
+// para que el fluido "se suelte" en vez de apelmazarse en el punto.
+function burst(x, y){
+  const s = state.force * 11;
+  splat(x, y, 0, 0, hsv2rgb(state.hue, 0.8, 0.16));      // gota central de tinte
+  const N = 10, rr = 0.018;
+  for(let i=0;i<N;i++){
+    const a = (i / N) * 6.2831853;
+    splat(x + Math.cos(a)*rr, y + Math.sin(a)*rr,
+          Math.cos(a)*s, Math.sin(a)*s,
+          hsv2rgb((state.hue + 0.05*Math.random()) % 1, 0.7, 0.05));
+  }
+}
+
+// =================== Bucle de simulación ===================
+const DT = 0.016;
+let lastSplat = {x:0.5, y:0.5};
+let autoT = 0;
+const pointerSplats = [];
+
+function step(){
+  const dt = DT * state.speed;
+  matAdvect.uniforms.dt.value = dt;
+  matVorticity.uniforms.dt.value = dt;
+
+  // 1) Inyecciones del usuario
+  while(pointerSplats.length){
+    const s = pointerSplats.shift();
+    splat(s.x, s.y, s.dx, s.dy, s.rgb);
+  }
+  // 2) Fuente automática (chorro que gira)
+  if(state.autoSource){
+    autoT += dt;
+    const cx = 0.5 + 0.28*Math.cos(autoT*0.7);
+    const cy = 0.5 + 0.28*Math.sin(autoT*0.9);
+    const dx = -Math.sin(autoT*0.7) * state.force * 1.4;
+    const dy =  Math.cos(autoT*0.9) * state.force * 1.4;
+    const rgb = hsv2rgb((state.hue + autoT*0.03)%1, 0.75, 0.16);
+    splat(cx, cy, dx, dy, rgb);
+  }
+
+  // 3) Vorticidad (confinamiento) -> realza remolinos de la advección
+  matCurl.uniforms.uVelocity.value = velocity.read.texture;
+  blit(matCurl, curlRT);
+  matVorticity.uniforms.uVelocity.value = velocity.read.texture;
+  matVorticity.uniforms.uCurl.value = curlRT.texture;
+  matVorticity.uniforms.curlAmount.value = state.euler ? Math.max(state.curl, 18) : state.curl;
+  blit(matVorticity, velocity.write); velocity.swap();
+
+  // 4) Proyección de presión (impone ∇·u = 0)  -- término −∇p
+  if(state.incompressible){
+    matDivergence.uniforms.uVelocity.value = velocity.read.texture;
+    blit(matDivergence, divergence);
+
+    matClear.uniforms.uTexture.value = pressure.read.texture;
+    matClear.uniforms.value.value = 0.8;
+    blit(matClear, pressure.write); pressure.swap();
+
+    matPressure.uniforms.uDivergence.value = divergence.texture;
+    for(let i=0;i<state.iterations;i++){
+      matPressure.uniforms.uPressure.value = pressure.read.texture;
+      blit(matPressure, pressure.write); pressure.swap();
+    }
+    matGradient.uniforms.uPressure.value = pressure.read.texture;
+    matGradient.uniforms.uVelocity.value = velocity.read.texture;
+    blit(matGradient, velocity.write); velocity.swap();
+  }
+
+  // 5) Advección de la velocidad -- término (u·∇)u + disipación viscosa ν∇²u
+  matAdvect.uniforms.uVelocity.value = velocity.read.texture;
+  matAdvect.uniforms.uSource.value = velocity.read.texture;
+  matAdvect.uniforms.dissipation.value = state.euler ? 0.02 : state.velDissipation;
+  blit(matAdvect, velocity.write); velocity.swap();
+
+  // 6) Advección del tinte (lo que vemos)
+  matAdvect.uniforms.uVelocity.value = velocity.read.texture;
+  matAdvect.uniforms.uSource.value = dye.read.texture;
+  matAdvect.uniforms.dissipation.value = state.dyeDissipation;
+  blit(matAdvect, dye.write); dye.swap();
+}
+
+// =================== Render de las dos vistas ===================
+let viewRects = { d3:{x:0,y:0,w:1,h:1}, d2:{x:0,y:0,w:1,h:1} };
+
+function computeRects(){
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  const halfW = Math.round(w/2);
+  // Cada vista ocupa toda su mitad: sin zonas muertas al hacer clic.
+  viewRects.d3 = { x:0,     y:0, w:halfW,     h:h };
+  viewRects.d2 = { x:halfW, y:0, w:w - halfW, h:h };
+}
+
+function renderViews(){
+  const w = canvas.width, h = canvas.height;
+  renderer.setRenderTarget(null);
+  renderer.setScissorTest(false);
+  renderer.setViewport(0,0,w,h);
+  renderer.setClearColor(0x04060c, 1);
+  renderer.clear();
+
+  // --- 3D (mitad izquierda) ---
+  const a = viewRects.d3;
+  const ay = h - (a.y + a.h);
+  renderer.setViewport(a.x, ay, a.w, a.h);
+  renderer.setScissor(a.x, ay, a.w, a.h);
+  renderer.setScissorTest(true);
+  camera3D.aspect = a.w / a.h; camera3D.updateProjectionMatrix();
+  matSurface.uniforms.uTex.value = dye.read.texture;
+  renderer.render(scene3D, camera3D);
+
+  // --- 2D (cuadrado en la mitad derecha) ---
+  const b = viewRects.d2;
+  const by = h - (b.y + b.h);
+  renderer.setViewport(b.x, by, b.w, b.h);
+  renderer.setScissor(b.x, by, b.w, b.h);
+  renderer.setScissorTest(true);
+  matView2D.uniforms.uVelocity.value = velocity.read.texture;
+  renderer.render(scene2D, simCam);
+
+  renderer.setScissorTest(false);
+}
+
+// =================== Loop principal ===================
+let fpsT = performance.now(), fpsN = 0;
+function loop(){
+  requestAnimationFrame(loop);
+  if(!state.paused) step();
+  controls.update();
+  renderViews();
+  fpsN++;
+  const now = performance.now();
+  if(now - fpsT > 500){
+    document.getElementById('fpsBadge').textContent = Math.round(fpsN*1000/(now-fpsT)) + ' fps · ' + RES + '² celdas';
+    fpsT = now; fpsN = 0;
+  }
+}
+
+// =================== Resize ===================
+function resize(){
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  computeRects();
+}
+window.addEventListener('resize', resize);
+
+// =================== Interacción con el ratón ===================
+function pointerToView(ev){
+  const r = canvas.getBoundingClientRect();
+  const x = ev.clientX - r.left, y = ev.clientY - r.top;
+  const d2 = viewRects.d2;
+  if(x >= d2.x){   // toda la mitad derecha inyecta (sin zonas muertas)
+    return { region:'2d', u:(x - d2.x)/d2.w, v:1 - (y - d2.y)/d2.h, px:x, py:y };
+  }
+  return { region:'3d', px:x, py:y };   // toda la mitad izquierda rota
+}
+
+let dragging2D = false, last2D = null;
+// fase de captura: decidimos antes que OrbitControls quién maneja el gesto
+canvas.addEventListener('pointerdown', (ev)=>{
+  const p = pointerToView(ev);
+  if(p.region === '2d'){
+    controls.enabled = false;
+    dragging2D = true; last2D = {u:p.u, v:p.v};
+    burst(p.u, p.v);                // clic = chasquido radial (no se apelmaza)
+  } else {
+    controls.enabled = true;        // mitad izquierda: OrbitControls rota
+  }
+}, true);
+
+window.addEventListener('pointermove', (ev)=>{
+  if(!dragging2D) return;
+  const p = pointerToView(ev);
+  // permitimos arrastrar fuera del cuadro: recortamos a [0,1]
+  const r = canvas.getBoundingClientRect();
+  const d2 = viewRects.d2;
+  const u = Math.min(1, Math.max(0, (ev.clientX - r.left - d2.x)/d2.w));
+  const v = Math.min(1, Math.max(0, 1 - (ev.clientY - r.top - d2.y)/d2.h));
+  if(last2D){
+    const dx = (u - last2D.u) * state.force * 600;
+    const dy = (v - last2D.v) * state.force * 600;
+    const rgb = hsv2rgb((state.hue + 0.05*Math.random()), 0.8, 0.22);
+    pointerSplats.push({x:u, y:v, dx, dy, rgb});
+  }
+  last2D = {u, v};
+});
+window.addEventListener('pointerup', ()=>{ dragging2D = false; last2D = null; });
+
+// =================== UI ===================
+const $ = (id)=>document.getElementById(id);
+
+// --- Presets de fluidos ---
+const presets = [
+  { name:'Agua',      hue:0.58, vel:0.45, dye:1.2, curl:28, color:'#4ea1ff' },
+  { name:'Miel',      hue:0.10, vel:4.4,  dye:0.4, curl:4,  color:'#ffb13d' },
+  { name:'Humo/Aire', hue:0.0,  vel:0.18, dye:0.7, curl:34, color:'#cfd6e6', sat:0.0 },
+  { name:'Aceite',    hue:0.16, vel:2.1,  dye:0.7, curl:12, color:'#d8d24a' },
+  { name:'Glicerina', hue:0.50, vel:3.6,  dye:0.5, curl:6,  color:'#7fe6d6' },
+];
+const presetsEl = $('presets');
+presets.forEach((p, i)=>{
+  const el = document.createElement('div');
+  el.className = 'preset' + (i===0?' active':'');
+  el.innerHTML = `<span class="dot" style="color:${p.color}">●</span>${p.name}`;
+  el.onclick = ()=>{
+    document.querySelectorAll('.preset').forEach(e=>e.classList.remove('active'));
+    el.classList.add('active');
+    state.hue = p.hue;
+    setSlider('viscosity', p.vel);
+    setSlider('dye', p.dye);
+    setSlider('curl', p.curl);
+    applyViscosity(); applyDye(); applyCurl();
+    flashTerm('visc');
+  };
+  presetsEl.appendChild(el);
+});
+
+// --- Sliders ---
+function setSlider(id, val){ const s=$(id); s.value = val; s.dispatchEvent(new Event('input', {bubbles:false})); }
+
+function applyViscosity(){
+  const v = parseFloat($('viscosity').value);
+  state.velDissipation = 0.1 + v * 0.95;             // viscosidad alta -> más frenado
+  $('vViscosity').textContent = v.toFixed(2) + (v<0.6?'  (poco viscoso)':v>3?'  (muy viscoso)':'');
+  updateReynolds();
+}
+function applyForce(){ state.force = parseFloat($('force').value); $('vForce').textContent = state.force.toFixed(0); updateReynolds(); }
+function applyCurl(){ state.curl = parseFloat($('curl').value); $('vCurl').textContent = state.curl.toFixed(0); }
+function applyIter(){ state.iterations = parseInt($('iter').value); $('vIter').textContent = state.iterations; }
+function applyDye(){ state.dyeDissipation = parseFloat($('dye').value); $('vDye').textContent = state.dyeDissipation.toFixed(2); }
+function applySpeed(){ state.speed = parseFloat($('speed').value); $('vSpeed').textContent = state.speed.toFixed(1) + '×'; }
+
+$('viscosity').addEventListener('input', ()=>{ applyViscosity(); flashTerm('visc'); });
+$('force').addEventListener('input', ()=>{ applyForce(); flashTerm('force'); });
+$('curl').addEventListener('input', ()=>{ applyCurl(); flashTerm('adv'); });
+$('iter').addEventListener('input', ()=>{ applyIter(); flashTerm('press'); });
+$('dye').addEventListener('input', ()=>{ applyDye(); flashTerm('visc'); });
+$('speed').addEventListener('input', ()=>{ applySpeed(); flashTerm('time'); });
+
+// --- Toggles ---
+function bindToggle(id, key, term){
+  const el = $(id);
+  el.addEventListener('click', ()=>{
+    el.classList.toggle('on');
+    state[key] = el.classList.contains('on');
+    flashTerm(term);
+  });
+}
+bindToggle('togIncomp','incompressible','div');
+bindToggle('togEuler','euler','visc');
+bindToggle('togSource','autoSource','force');
+
+// --- Botones ---
+$('pause').addEventListener('click', ()=>{
+  state.paused = !state.paused;
+  $('pause').textContent = state.paused ? '▶ Reanudar' : '⏸ Pausar';
+});
+$('reset').addEventListener('click', clearFluid);
+
+function clearFluid(){
+  matClear.uniforms.value.value = 0.0;
+  for(const fbo of [velocity, dye, pressure]){
+    matClear.uniforms.uTexture.value = fbo.read.texture; blit(matClear, fbo.write); fbo.swap();
+    matClear.uniforms.uTexture.value = fbo.read.texture; blit(matClear, fbo.write); fbo.swap();
+  }
+  matClear.uniforms.value.value = 0.8;
+}
+
+// --- Número de Reynolds (ilustrativo) ---
+function updateReynolds(){
+  const nu = parseFloat($('viscosity').value);
+  const Re = Math.round(state.force * 12 / nu);
+  $('reNum').textContent = '≈ ' + Re.toLocaleString('es');
+  const reg = $('reReg');
+  if(Re < 1000){ reg.textContent='Laminar · ordenado'; reg.style.color='var(--t-visc)'; }
+  else if(Re < 3000){ reg.textContent='Transición'; reg.style.color='var(--t-force)'; }
+  else { reg.textContent='Turbulento · caótico'; reg.style.color='var(--t-adv)'; }
+}
+
+// --- Resaltado de términos de la ecuación ---
+const termText = {
+  time:  ['∂u/∂t — Aceleración local','Cómo cambia la velocidad <b>en cada punto con el tiempo</b>. Es el lado “m·a” de la ley. Si fuera 0, el flujo sería <b>estacionario</b>. El control «Velocidad de simulación» controla este ritmo.'],
+  adv:   ['(u·∇)u — Advección (convección)','El fluido <b>se transporta a sí mismo</b>. Es el término <b>no lineal</b> que crea remolinos y turbulencia. La «Vorticidad» realza estas estructuras.'],
+  press: ['−∇p — Gradiente de presión','La presión empuja el fluido de zonas comprimidas a relajadas. Resolverla (con varias <b>iteraciones</b>) es lo que mantiene ∇·u = 0, es decir, el <b>volumen constante</b>.'],
+  visc:  ['μ∇²u — Difusión viscosa','El <b>rozamiento interno</b> frena y suaviza el flujo. Mucha viscosidad → miel; poca → agua/aire. Con «Fluido ideal (Euler)» este término se anula (ν = 0).'],
+  force: ['f — Fuerzas externas','Lo que <b>empuja</b> el fluido: tu ratón, la gravedad, un ventilador… Aquí lo controlas con «Fuerza de inyección» y al arrastrar sobre el panel 2D.'],
+  div:   ['∇·u = 0 — Incompresibilidad','Conservación de masa: <b>lo que entra en una región, sale</b>. Es la restricción que impone el término de presión. Apágala y el fluido se comprime.'],
+};
+const termEls = {};
+document.querySelectorAll('.term[data-key]').forEach(el=>{
+  const k = el.dataset.key; termEls[k] = el;
+  el.addEventListener('mouseenter', ()=> showTerm(k));
+});
+function showTerm(k){
+  const [title, body] = termText[k];
+  $('termExplain').innerHTML = `<b style="color:var(--t-${k==='adv'?'adv':k==='press'?'press':k==='visc'?'visc':k==='force'?'force':k==='div'?'div':'time'})">${title}.</b> ${body}`;
+  for(const key in termEls) termEls[key].classList.toggle('hot', key===k);
+}
+let flashTimer = null;
+function flashTerm(k){
+  showTerm(k);
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(()=>{ if(termEls[k]) termEls[k].classList.remove('hot'); }, 1400);
+}
+
+// =================== Arranque ===================
+function fail(msg){
+  document.getElementById('errbox').innerHTML = `<div class="err"><b>No se pudo iniciar la simulación.</b><br>${msg}</div>`;
+  throw new Error(msg);
+}
+// inicializa valores por defecto en la UI
+setSlider('viscosity', 0.45); setSlider('force', 80); setSlider('curl', 28);
+setSlider('iter', 22); setSlider('dye', 1.2); setSlider('speed', 1.0);
+applyViscosity(); applyForce(); applyCurl(); applyIter(); applyDye(); applySpeed();
+updateReynolds();
+clearFluid();
+resize();
+// un par de chasquidos iniciales para que arranque con vida y se note el splash
+burst(0.5, 0.55);
+setTimeout(()=>burst(0.38, 0.42), 350);
+setTimeout(()=>burst(0.64, 0.40), 700);
+loop();
+</script>
+</body>
+</html>
